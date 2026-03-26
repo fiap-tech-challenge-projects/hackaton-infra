@@ -1,0 +1,107 @@
+services:
+  api-gateway:
+    build:
+      context: ../hackaton-api-gateway
+      dockerfile: Dockerfile
+    ports: ["3000:3000"]
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      UPLOAD_SERVICE_URL: http://upload-service:3001
+      PROCESSING_SERVICE_URL: http://processing-service:3002
+      REPORT_SERVICE_URL: http://report-service:3003
+    depends_on:
+      upload-service:
+        condition: service_healthy
+      report-service:
+        condition: service_healthy
+
+  upload-service:
+    build:
+      context: ../hackaton-upload-service
+      dockerfile: Dockerfile
+    ports: ["3001:3001"]
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://upload_user:upload_pass@postgres-upload:5432/upload_service
+      RABBITMQ_URL: amqp://rabbit:rabbit@rabbitmq:5672
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: diagrams
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
+    depends_on:
+      postgres-upload:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  processing-service:
+    build:
+      context: ../hackaton-processing-service
+      dockerfile: Dockerfile
+    ports: ["3002:3002"]
+    environment:
+      NODE_ENV: development
+      PORT: 3002
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      DYNAMODB_TABLE_NAME: hackaton-analysis-results-development
+      RABBITMQ_URL: amqp://rabbit:rabbit@rabbitmq:5672
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: diagrams
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      AWS_REGION: us-east-1
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      dynamodb-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  report-service:
+    build:
+      context: ../hackaton-report-service
+      dockerfile: Dockerfile
+    ports: ["3003:3003"]
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      DATABASE_URL: postgresql://report_user:report_pass@postgres-report:5432/report_service
+      RABBITMQ_URL: amqp://rabbit:rabbit@rabbitmq:5672
+    depends_on:
+      postgres-report:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
