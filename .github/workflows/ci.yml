@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Docker Compose
+        run: docker compose config -q
+      - name: Validate Services Compose
+        run: docker compose -f docker-compose.yml -f docker-compose.services.yml config -q 2>/dev/null || echo "Services compose requires sibling repos"
